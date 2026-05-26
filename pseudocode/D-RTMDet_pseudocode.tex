@@ -1,0 +1,65 @@
+% Pseudocode for the manuscript method.
+% Required packages:
+% \usepackage{algorithm}
+% \usepackage{algpseudocode}
+
+\begin{algorithm}[t]
+\caption{Training procedure of D-RTMDet}
+\label{alg:drtmdet_train}
+\begin{algorithmic}[1]
+\Require Training set $\mathcal{D}=\{(I_i,B_i,M_i,D_i)\}_{i=1}^{N}$, where $I_i$ is an RGB image, $B_i$ is the bounding-box annotation, $M_i$ is the ridge mask annotation, and $D_i$ is the aligned depth prior; feature levels $\mathcal{L}=\{3,4,5\}$; DAA fusion levels $\mathcal{L}_d=\{3,4\}$.
+\Ensure Optimized D-RTMDet parameters $\Theta$.
+\State Initialize D-RTMDet with ECN backbone, DAA branch, BECNeck, and instance segmentation head.
+\For{each training epoch}
+    \For{each mini-batch $(I,B,M,D)$}
+        \State Apply synchronized geometric augmentation to $I$, $B$, $M$, and $D$.
+        \State Extract multi-scale features $\{P_3,P_4,P_5\}\gets \mathrm{ECN}(I)$.
+        \State Initialize depth loss $\mathcal{L}_{depth}\gets 0$.
+        \For{each level $l\in\mathcal{L}_d$}
+            \State Resize depth prior $D_l\gets \mathrm{Resize}(D,\mathrm{size}(P_l))$.
+            \State Compute normalized boundary weight $E_l\gets \mathrm{Sobel}(D_l)$.
+            \State Encode depth feature $Z_l\gets \mathrm{Conv}_{1\times1}(D_l)\odot(1+E_l)$.
+            \State Predict depth map $\hat{D}_l\gets \sigma(\mathrm{Conv}_{1\times1}(P_l))$.
+            \State Fuse RGB and depth features $P_l\gets \mathrm{Conv}_{1\times1}([P_l,Z_l])$.
+            \State $\mathcal{L}_{depth}\gets \mathcal{L}_{depth}+\|\hat{D}_l-D_l\|_1$.
+        \EndFor
+        \State Obtain boundary-enhanced pyramid features $\{F_3,F_4,F_5\}\gets \mathrm{BECNeck}(\{P_3,P_4,P_5\})$.
+        \State Refine each feature level by PSA: $\tilde{F}_l\gets \mathrm{PSA}(F_l)$.
+        \State Predict classification scores, bounding boxes, dynamic mask kernels, and mask features from $\{\tilde{F}_3,\tilde{F}_4,\tilde{F}_5\}$.
+        \State Assign positive samples with Dynamic Soft Label Assignment.
+        \State Generate positive mask logits $\hat{M}$ using the predicted dynamic kernels.
+        \State Compute losses $\mathcal{L}_{cls}$, $\mathcal{L}_{box}$, and $\mathcal{L}_{mask}$ with quality focal loss, GIoU loss, and Dice loss.
+        \State Compute connectivity loss
+        \[
+        \mathcal{L}_{conn}=1-\mathrm{clDice}(\mathrm{Skel}(\sigma(\hat{M})),\mathrm{Skel}(M)).
+        \]
+        \State Update model parameters by minimizing
+        \[
+        \mathcal{L}=\mathcal{L}_{cls}+\lambda_{box}\mathcal{L}_{box}
+        +\lambda_{mask}\mathcal{L}_{mask}
+        +\lambda_{conn}\mathcal{L}_{conn}
+        +\lambda_{depth}\mathcal{L}_{depth}.
+        \]
+    \EndFor
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[t]
+\caption{Inference procedure of D-RTMDet}
+\label{alg:drtmdet_infer}
+\begin{algorithmic}[1]
+\Require Test RGB image $I$; score threshold $\tau_s$; mask threshold $\tau_m$; NMS threshold $\tau_{nms}$.
+\Ensure Ridge segmentation mask $Y$.
+\State Resize and pad $I$ to the network input size.
+\State Extract multi-scale features $\{P_3,P_4,P_5\}\gets \mathrm{ECN}(I)$.
+\State Obtain pyramid features $\{F_3,F_4,F_5\}\gets \mathrm{BECNeck}(\{P_3,P_4,P_5\})$.
+\State Refine each feature level by PSA and predict scores, boxes, dynamic kernels, and mask features.
+\State Decode boxes and instance masks from point predictions and dynamic kernels.
+\State Remove low-confidence predictions with score threshold $\tau_s$.
+\State Apply non-maximum suppression with threshold $\tau_{nms}$.
+\State Binarize each retained mask with $\tau_m$ and optionally apply morphological closing.
+\State Merge retained instance masks into the final binary ridge map $Y$.
+\State Restore $Y$ to the original image resolution.
+\end{algorithmic}
+\end{algorithm}
