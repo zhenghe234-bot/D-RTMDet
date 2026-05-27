@@ -14,18 +14,6 @@ This repository contains the public supplementary materials for the manuscript:
 | `pseudocode/D-RTMDet_pseudocode.tex` | LaTeX pseudocode for the D-RTMDet training and RGB-only inference procedures. |
 | `SHA256SUMS.txt` | SHA256 checksums for the repository files and the external checkpoint. |
 
-## What To Upload To GitHub
-
-Upload these files and folders to the GitHub repository:
-
-- `README.md`
-- `SHA256SUMS.txt`
-- `.gitignore`
-- `.gitattributes`
-- `pseudocode/`
-- `test_data/`
-
-Do not upload the large checkpoint file itself to GitHub. The checkpoint is provided through the external download link in the next section.
 
 ## Test Data
 
